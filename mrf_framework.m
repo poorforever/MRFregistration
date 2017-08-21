@@ -2,6 +2,9 @@
 % find the minimum set of labels in order to register 2 images (non-rigid registration)
 % The MRF used is a free-form deformation grid
 
+% an exemple of use is :
+% [registered_image, time, energy, deformation_field] = mrf_framework('target_r.png', 'source_r.png', [11 11], 3, 5, 9, 10, 10, 0.5);
+
 % The MRF solver needs 8 datas to work :
 % - num_nodes : the total number of nodes (= node_grid_size*node_grid_size) , num_nodes >=4
 % - num_labels : the numbers of labels in a node's label set (= label_grid_size*label_grid_size)
@@ -13,7 +16,6 @@
 % - pPotential : list of pairwise potential (regularization term the encode geometric constraints) , pPotential(label_i, label_j) = pPotential( (j-1)*num_labels + i)
 
 % dataset is written in a binary file, then go through the mrf solver, then the output is used in matlab to get the deformation field 
-
 
 
 % this is the main
@@ -40,17 +42,6 @@ function [registered_image, time, energy, deformation_field] = mrf_framework(fix
     fixed  = rgb2gray(fixed);
     moving = rgb2gray(moving);
     
-    
-    b_fixed = fixed;
-    b_moving = moving;
-    blurring = 0;
-    
-%     PSF = fspecial('average',5);
-%     b_fixed = imfilter(fixed, PSF, 'conv', 'circular');
-%     b_moving = imfilter(moving, PSF, 'conv', 'circular');
-%     blurring = 1;
-
-    
     figure('Name', 'target-source'); imshowpair(fixed, moving, 'diff');
     l = size(label_grid_size,2);
     m = size(num_max_iters,2);
@@ -68,10 +59,10 @@ function [registered_image, time, energy, deformation_field] = mrf_framework(fix
     dimensions = size(fixed);
     deformation_field = zeros(dimensions(1), dimensions(2));
     
-    registered_image = b_moving;
+    registered_image = moving;
     for j=1:iterations
         fprintf('pyramid level : %d, iterations : %d', 1, j);
-       [registered_image, t, energy, Df] = mrf_registration(b_fixed, registered_image, node_grid_sizes, label_grid_size, num_max_iters, lambda);
+       [registered_image, t, energy, Df] = mrf_registration(fixed, registered_image, node_grid_sizes, label_grid_size, num_max_iters, lambda);
        deformation_field = deformation_field + Df;
     end
 %     disp(t);
