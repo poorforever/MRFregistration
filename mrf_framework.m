@@ -24,7 +24,6 @@
 % - pyramidLevels : numver of pyramid levels to perform registration. if 1 then registration is perfom only once with node_grid_sizes parameters, else node grid sizes is double at each level.
 % - iterations : number of iterations of the algorithm for each pyramidLevels
 % - label_grid_size : size of the label space
-% - patch_size : size of the patch space
 % - num_max_iters : number of maximum iterations of the FastPD executable
 % - lambda : parameter for  the rigitidy of the registration
 % - label_factor : define te size of the label space at level n+1 depending on the size at level n
@@ -46,10 +45,10 @@ function [registered_image, time, energy, deformation_field] = mrf_framework(fix
     b_moving = moving;
     blurring = 0;
     
-    PSF = fspecial('average',5);
-    b_fixed = imfilter(fixed, PSF, 'conv', 'circular');
-    b_moving = imfilter(moving, PSF, 'conv', 'circular');
-    blurring = 1;
+%     PSF = fspecial('average',5);
+%     b_fixed = imfilter(fixed, PSF, 'conv', 'circular');
+%     b_moving = imfilter(moving, PSF, 'conv', 'circular');
+%     blurring = 1;
 
     
     figure('Name', 'target-source'); imshowpair(fixed, moving, 'diff');
@@ -117,7 +116,6 @@ end
 % - moving : matlab matrix containing the source image
 % - node_grid_sizes : list of 2 elements containing node grid sizes for each dimension, first element is height, second is width
 % - label_grid_size : size of the label space
-% - patch_size : size of the patch space
 % - num_max_iters : number of maximum iterations of the FastPD executable
 % - lambda : parameter for  the rigitidy of the registration
 % list of output :
@@ -134,7 +132,8 @@ function [registered_image, time, energy, Df] = mrf_registration(fixed, moving, 
     [registered_image, sol, Df] = mrf_warp(solution_path, moving, node_grid_sizes, label_grid_sizes);
     time = toc(start);
     energy = 0;
-%     energy = mrf_energy_calculate(uPotential, pPotential, sol, node_grid_sizes, label_grid_sizes);
+    % energy function needs to be corrected
+    %energy = mrf_energy_calculate(uPotential, pPotential, sol, node_grid_sizes, label_grid_sizes);
 end
 
 % intermediate function that create a dataset usable in the FastPD executable
@@ -143,7 +142,6 @@ end
 % - moving : matlab matrix containing the source image
 % - node_grid_sizes : list of 2 elements containing node grid sizes for each dimension, first element is height, second is width
 % - label_grid_size : size of the label space
-% - patch_size : size of the patch space
 % - num_max_iters : number of maximum iterations of the FastPD executable
 % - lambda : parameter for  the rigitidy of the registration
 % list of output :
