@@ -32,21 +32,21 @@
 % - registered_image : result of the image registration
 % - time : time spent 
 % - energy : final energy of the mrf
-function [registered_image, time, energy] = mrf_framework(fixed_path, moving_path, node_grid_sizes, pyramidLevels, iterations, label_grid_size, patch_size, num_max_iters, lambda, label_factor)
+function [registered_image, time, energy, deformation_field] = mrf_framework(fixed_path, moving_path, node_grid_sizes, pyramidLevels, iterations, label_grid_size, num_max_iters, lambda, label_factor)
+%     close all
+%     clc;
     start = tic;
     fixed  = imread(fixed_path);
     moving = imread(moving_path);
     fixed  = rgb2gray(fixed);
     moving = rgb2gray(moving);
     
-    PSF = fspecial('average',9);
-    
     
     b_fixed = fixed;
     b_moving = moving;
     blurring = 0;
     
-    
+    PSF = fspecial('average',5);
     b_fixed = imfilter(fixed, PSF, 'conv', 'circular');
     b_moving = imfilter(moving, PSF, 'conv', 'circular');
     blurring = 1;
@@ -66,10 +66,14 @@ function [registered_image, time, energy] = mrf_framework(fixed_path, moving_pat
         error('label_factor must be inferior or equal to 1');
     end
     
+    dimensions = size(fixed);
+    deformation_field = zeros(dimensions(1), dimensions(2));
+    
     registered_image = b_moving;
     for j=1:iterations
         fprintf('pyramid level : %d, iterations : %d', 1, j);
-       [registered_image, t, energy] = mrf_registration(b_fixed, registered_image, node_grid_sizes, label_grid_size, patch_size, num_max_iters, lambda);
+       [registered_image, t, energy, Df] = mrf_registration(b_fixed, registered_image, node_grid_sizes, label_grid_size, num_max_iters, lambda);
+       deformation_field = deformation_field + Df;
     end
 %     disp(t);
 %     disp(energy);
@@ -82,7 +86,8 @@ function [registered_image, time, energy] = mrf_framework(fixed_path, moving_pat
             node_grid_sizes = 2*node_grid_sizes-1;
             for j=1:iterations
                 fprintf('pyramid level : %d, iterations : %d', i, j);
-                [registered_image, t, energy] = mrf_registration(fixed, registered_image, node_grid_sizes, label_grid_size, patch_size, num_max_iters, lambda);
+                [registered_image, t, energy, Df] = mrf_registration(fixed, registered_image, node_grid_sizes, label_grid_size, num_max_iters, lambda);
+                deformation_field = deformation_field + Df;
             end
 %             disp(t);
 %             disp(energy);
@@ -99,7 +104,7 @@ function [registered_image, time, energy] = mrf_framework(fixed_path, moving_pat
         title('Restoration of Blurred, Noisy Image Using Estimated NSR');
     end
     
-    
+    deformation_field = -1 * deformation_field;
     figure('Name', 'registered-target'); imshowpair(fixed, registered_image, 'diff');
     figure('Name', 'registered_image'); imshow(registered_image);
     
@@ -119,14 +124,14 @@ end
 % - registered_image : result of the image registration
 % - time : time spent 
 % - energy : final energy of the mrf
-function [registered_image, time, energy] = mrf_registration(fixed, moving, node_grid_sizes, label_grid_sizes, patch_size, num_max_iters, lambda)
+function [registered_image, time, energy, Df] = mrf_registration(fixed, moving, node_grid_sizes, label_grid_sizes, num_max_iters, lambda)
     start = tic; 
-    [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, moving, node_grid_sizes, label_grid_sizes, patch_size, num_max_iters, lambda);
+    [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, moving, node_grid_sizes, label_grid_sizes, num_max_iters, lambda);
     num_nodes = node_grid_sizes(1)*node_grid_sizes(2);
 
     num_labels = label_grid_sizes*label_grid_sizes;
     solution_path = mrf_solver(dataset_path, num_nodes, num_labels, num_max_iters);
-    [registered_image, sol] = mrf_warp(solution_path, moving, node_grid_sizes, label_grid_sizes);
+    [registered_image, sol, Df] = mrf_warp(solution_path, moving, node_grid_sizes, label_grid_sizes);
     time = toc(start);
     energy = 0;
 %     energy = mrf_energy_calculate(uPotential, pPotential, sol, node_grid_sizes, label_grid_sizes);
@@ -145,7 +150,7 @@ end
 % - dataset_path : path to where the input of the FastPD executable is saved
 % - uPotential : matlab matrix containing unary potentials
 % - pPotential : matlab matrix containing pairwise potentials
-function [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, moving, node_grid_sizes, label_grid_size, patch_size, num_max_iters, lambda) 
+function [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, moving, node_grid_sizes, label_grid_size, num_max_iters, lambda) 
 
    
     dimensions = size(moving);
@@ -156,10 +161,12 @@ function [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, movi
     end
     height = dimensions(1);
     width = dimensions(2);
-    
+    patch_size = 5*label_grid_size;
+    if(rem(patch_size,2))~=1
+        patch_size = patch_size+1;
+    end
     margin = label_grid_size * patch_size;
-%     m_fixed = 255 * patch_size^2 * label_grid_size^2 * ones( height + 2*margin, width + 2*margin);
-     m_fixed = zeros( height + 2*margin, width + 2*margin);
+    m_fixed = zeros( height + 2*margin, width + 2*margin);
     m_moving = m_fixed;
     
     m_fixed(margin+1:height+margin,margin+1:width+margin) = fixed+1;
@@ -180,11 +187,7 @@ function [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, movi
     
     if  rem(label_grid_size, 2) ~= 1
         error ('label_grid_size should be an odd number');
-    end 
-    
-    if rem(patch_size, 2) ~= 1
-        error ('patch_size should be an odd number');
-    end 
+    end
     
     num_labels = label_grid_size*label_grid_size;    
 
@@ -226,10 +229,7 @@ function [dataset_path, uPotential, pPotential] = mrf_create_dataset(fixed, movi
             end
         end
     end 
-    patch_size = (1/3)*label_grid_size;
-    if(rem(patch_size,2))~=1
-        patch_size = patch_size+1;
-    end
+
     %calculate unary potentials
     offset = floor(label_grid_size/2);
     uPotential = 255 * patch_size^2 * label_grid_size^2 * ones(num_labels, num_nodes);
@@ -339,11 +339,11 @@ end
 % list of output :
 % - registered_image : result of the image registration
 % - sol : matlab matrix containing reulsut of the FastPD executable
-function [registered_image, sol] = mrf_warp(solution_path, moving, node_grid_sizes, label_grid_size)
+function [registered_image, sol, Df] = mrf_warp(solution_path, moving, node_grid_sizes, label_grid_size)
     file = fopen(solution_path, 'rb');
     solution = fread(file, [node_grid_sizes(1) node_grid_sizes(2)], 'uint32');
     sol = solution;
-    disp(solution);
+%     disp(solution);
     fclose(file);
     tmp = floor(label_grid_size/2);
     xd = rem(solution, label_grid_size);
